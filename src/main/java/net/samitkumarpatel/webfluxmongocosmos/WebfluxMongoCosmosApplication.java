@@ -29,34 +29,53 @@ public class WebfluxMongoCosmosApplication {
 	}
 
 	@Bean
-	public RouterFunction<ServerResponse> route() {
+	public RouterFunction<ServerResponse> route(Handler handler) {
 		return RouterFunctions
 				.route()
-				.GET("/customer/all", request -> ok().body(customerRepository.findAll().collectList(), List.class))
-				.GET("/customer/{id}", request -> ok().body(customerRepository.findById(request.pathVariable("id")), Customer.class))
-				.POST("/customer", request -> {
+				.GET("/customer/all", handler::all)
+				.GET("/customer/{id}", handler::customerById )
+				.POST("/customer", handler::save)
+				.PUT("/customer/{id}", handler::update)
+				.DELETE("/customer/{id}", handler::delete)
+				.build();
+	}
+}
+
+
+@Component
+@Slf4j
+record Handler(CustomerRepository customerRepository) {
+	public Mono<ServerResponse> all(ServerRequest request) {
+		return ok().body(customerRepository.findAll().collectList(), List.class);
+	}
+
+	public Mono<ServerResponse> customerById(ServerRequest request) {
+		return ok().body(customerRepository.findById(request.pathVariable("id")), Customer.class);
+	}
+
+	public Mono<ServerResponse> save(ServerRequest request) {
+		return request
+				.bodyToMono(Customer.class)
+				.flatMap(customer -> ok().body(customerRepository.save(customer), Customer.class));
+	}
+
+	public Mono<ServerResponse> update(ServerRequest request) {
+		var id = request.pathVariable("id");
+		return customerRepository
+				.findById(id)
+				.doOnNext(c -> log.info("db customer : {}",c))
+				.flatMap(customer -> {
 					return request
 							.bodyToMono(Customer.class)
-							.flatMap(customer -> ok().body(customerRepository.save(customer), Customer.class));
-				})
-				.PUT("/customer/{id}", request -> {
-					var id = request.pathVariable("id");
-					return customerRepository
-							.findById(id)
-							.doOnNext(c -> log.info("db customer : {}",c))
-							.flatMap(customer -> {
-								return request
-										.bodyToMono(Customer.class)
-										.doOnNext(c -> log.info("request customer : {}"))
-										.map(customer1 -> Customer.builder().id(customer.id()).name(customer1.name()).age(customer1.age()).build())
-										.flatMap(customer2 -> ok().body(customerRepository.save(customer2), Customer.class));
-							});
-				})
-				.DELETE("/customer/{id}", request -> {
-					var id = request.pathVariable("id");
-					return ok().body(customerRepository.deleteById(id), Void.class);
-				})
-				.build();
+							.doOnNext(customer1 -> log.info("request customer : {}", customer1))
+							.map(customer1 -> Customer.builder().id(customer.id()).name(customer1.name()).age(customer1.age()).build())
+							.flatMap(customer2 -> ok().body(customerRepository.save(customer2), Customer.class));
+				});
+	}
+
+	public Mono<ServerResponse> delete(ServerRequest request) {
+		var id = request.pathVariable("id");
+		return ok().body(customerRepository.deleteById(id), Void.class);
 	}
 }
 
