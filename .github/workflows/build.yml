@@ -8,6 +8,9 @@ on:
 jobs:
   build:
     runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      packages: write
     steps:
     - uses: actions/checkout@v3
     - uses: graalvm/setup-graalvm@v1
@@ -24,5 +27,5 @@ jobs:
         gu --version
         native-image --version
 
-    - name: Build with Maven
-      run: ./mvnw -B clean install
+    - name: Build & Push
+      run: ./mvnw -B deploy -s $GITHUB_WORKSPACE/settings.xml
